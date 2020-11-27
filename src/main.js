@@ -54,12 +54,16 @@ async function getFreeSpace(mail) {
                         enableSendEmail = false;
                         setTimeout(() => {
                             enableSendEmail = true;
-                        }, 1000 * 60 * 60);
+                        }, 1000 * 60 * 60 * 24);
                     })
                     .catch((e) => console.log(e))
 
                 mailOptions.to = '';
             }
+        }
+
+        if(availableMb > Number(MB_LIMIT)) {
+            enableSendEmail = true;
         }
 
     } catch (err) {
