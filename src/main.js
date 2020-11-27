@@ -34,10 +34,11 @@ setInterval(async () => {
 
 async function getFreeSpace(mail) {
     try {
-        let path = os.platform() === 'win32' ? 'c:' : '/';
+        const path = (os.platform() === 'win32') ? 'c:' : (process.env.VOLUME_PATH) ? process.env.VOLUME_PATH : '/';
         const {free, available} = await disk.check(path);
-        console.log(`Free space: ${free}`);
+
         const freeMb = Number(free * (9.537 * Math.pow(10, -7)));
+        console.log(`Free space: ${freeMb}`);
 
         const availableMb = Number(available * (9.537 * Math.pow(10, -7)));
         console.log(`available: ${availableMb}`);
@@ -45,8 +46,6 @@ async function getFreeSpace(mail) {
         if (availableMb <= Number(MB_LIMIT) && enableSendEmail) {
             const ip = await publicIp.v4();
             mailOptions.text = `Server ip: ${ip} - Espacio libre: ${freeMb} MB - Espacio disponible: ${availableMb} MB`
-            console.log(ip);
-
             for (let index = 0; index < to.length; index++) {
                 mailOptions.to = to[index];
                 mail.sendMail(mailOptions)
