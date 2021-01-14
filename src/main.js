@@ -25,7 +25,7 @@ const mail = nodemailer.createTransport({
 const mailOptions = {
     from: FROM_EMAIl,
     to: '',
-    subject: 'Alerta. Espacio de disco mínimo.',
+    subject: '',
     text: ''
 };
 
@@ -35,7 +35,7 @@ setInterval(async () => {
     if (process.env.VOLUME_PATH) {
         await getFreeSpace(process.env.VOLUME_PATH, true);
     }
-}, 5000)
+}, 30000)
 
 async function getFreeSpace(path, resize) {
     try {
@@ -50,6 +50,7 @@ async function getFreeSpace(path, resize) {
         // warning email
         if (availableMb <= Number(MB_LIMIT) && enableSendEmailMinSpace) {
             const ip = await publicIp.v4();
+            mailOptions.subject = 'Alerta. Espacio de disco mínimo.';
             mailOptions.text = `Server ip: ${ip} - Espacio libre: ${freeMb} MB - Espacio disponible: ${availableMb} MB`
             for (let index = 0; index < to.length; index++) {
                 mailOptions.to = to[index];
@@ -84,7 +85,7 @@ async function getFreeSpace(path, resize) {
                     });
 
                 if(respNewAmount.data) {
-                    exec('ls | grep js', (err, stdout, stderr) => {
+                    exec(`sudo resize2fs ${process.env.VOLUME_FILESYSTEM}` , async (err, stdout, stderr) => {
                         if (err) {
                             //some err occurred
                             console.error(err)
@@ -92,24 +93,23 @@ async function getFreeSpace(path, resize) {
                             // the *entire* stdout and stderr (buffered)
                             console.log(`stdout: ${stdout}`);
                             console.log(`stderr: ${stderr}`);
+
+                            const ip = await publicIp.v4();
+                            mailOptions.text = `Server ip: ${ip} - Se agregaron ${amountToAdd} GB - Espacio libre: ${freeMb} MB - Espacio disponible: ${availableMb} MB - Espacito total ${newSize} GB`
+                            mailOptions.subject = `Se ha agregado mas espacio de disco al volumen`
+                            for (let index = 0; index < to.length; index++) {
+                                mailOptions.to = to[index];
+                                const info = await mail.sendMail(mailOptions);
+                                console.log('Email sent: ' + info.response);
+                                mailOptions.to = '';
+                            }
                         }
                     });
                 }
             }
 
 
-            const ip = await publicIp.v4();
-            mailOptions.text = ``
-            for (let index = 0; index < to.length; index++) {
-                mailOptions.to = to[index];
-                const info = await mail.sendMail(mailOptions);
-                console.log('Email sent: ' + info.response);
-                enableSendEmailMinSpace = false;
-                setTimeout(() => {
-                    enableSendEmailMinSpace = true
-                }, 1000 * 60 * 60 * 24);
-                mailOptions.to = '';
-            }
+
         }
 
         if (availableMb > Number(MB_LIMIT)) {
