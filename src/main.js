@@ -2,6 +2,8 @@ const disk = require('diskusage');
 const os = require('os');
 const nodemailer = require('nodemailer');
 const publicIp = require('public-ip');
+const axios = require('axios');
+const { exec } = require('child_process');
 
 const MB_LIMIT = process.env.MB_LIMIT;
 const USER_EMAIL = process.env.USER_EMAIL;
@@ -9,7 +11,7 @@ const USER_PASS = process.env.USER_PASS;
 const FROM_EMAIl = process.env.FROM_EMAIl;
 const to = process.env.TO_EMAIl.split(' ');
 
-let enableSendEmail = true;
+let enableSendEmailMinSpace = true;
 
 const mail = nodemailer.createTransport({
     service: 'gmail',
@@ -20,7 +22,6 @@ const mail = nodemailer.createTransport({
 });
 
 
-
 const mailOptions = {
     from: FROM_EMAIl,
     to: '',
@@ -29,41 +30,90 @@ const mailOptions = {
 };
 
 setInterval(async () => {
-    await getFreeSpace(mail);
+    await getFreeSpace('/', false);
+
+    if (process.env.VOLUME_PATH) {
+        await getFreeSpace(process.env.VOLUME_PATH, true);
+    }
 }, 5000)
 
-async function getFreeSpace(mail) {
+async function getFreeSpace(path, resize) {
     try {
-        const path = (os.platform() === 'win32') ? 'c:' : (process.env.VOLUME_PATH) ? process.env.VOLUME_PATH : '/';
-        const {free, available} = await disk.check(path);
+        const {free, available, total} = await disk.check(path);
 
-        const freeMb = Number(free * (9.537 * Math.pow(10, -7)));
+        const freeMb = Math.floor(Number(free * (9.537 * Math.pow(10, -7))));
         console.log(`Free space: ${freeMb}`);
 
-        const availableMb = Number(available * (9.537 * Math.pow(10, -7)));
+        const availableMb = Math.floor(Number(available * (9.537 * Math.pow(10, -7))));
         console.log(`available: ${availableMb}`);
 
-        if (availableMb <= Number(MB_LIMIT) && enableSendEmail) {
+        // warning email
+        if (availableMb <= Number(MB_LIMIT) && enableSendEmailMinSpace) {
             const ip = await publicIp.v4();
             mailOptions.text = `Server ip: ${ip} - Espacio libre: ${freeMb} MB - Espacio disponible: ${availableMb} MB`
             for (let index = 0; index < to.length; index++) {
                 mailOptions.to = to[index];
-                mail.sendMail(mailOptions)
-                    .then((info) => {
-                        console.log('Email sent: ' + info.response);
-                        enableSendEmail = false;
-                        setTimeout(() => {
-                            enableSendEmail = true;
-                        }, 1000 * 60 * 60 * 24);
-                    })
-                    .catch((e) => console.log(e))
-
+                const info = await mail.sendMail(mailOptions);
+                console.log('Email sent: ' + info.response);
+                enableSendEmailMinSpace = false;
+                setTimeout(() => {
+                    enableSendEmailMinSpace = true
+                }, 1000 * 60 * 60 * 24);
                 mailOptions.to = '';
             }
         }
 
-        if(availableMb > Number(MB_LIMIT)) {
-            enableSendEmail = true;
+        // new size
+        if (availableMb <= Number(MB_LIMIT) && resize) {
+            const totalGb = Math.floor(Number(total * (9.537 * Math.pow(10, -10))));
+            const amountToAdd = (process.env.AMOUNT_GB_ADD) ? process.env.AMOUNT_GB_ADD : 5;
+            const newSize = totalGb + amountToAdd;
+
+            if (process.env.VOLUME_ID) {
+                const respNewAmount = await axios.post(`https://api.digitalocean.com/v2/volumes/${process.env.VOLUME_ID}/actions`,
+                    {
+                        type: "resize",
+                        size_gigabytes: newSize,
+                        region: process.env.VOLUME_REGION
+                    },
+                    {
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${process.env.TOKEN_DO}`
+                        },
+                    });
+
+                if(respNewAmount.data) {
+                    exec('ls | grep js', (err, stdout, stderr) => {
+                        if (err) {
+                            //some err occurred
+                            console.error(err)
+                        } else {
+                            // the *entire* stdout and stderr (buffered)
+                            console.log(`stdout: ${stdout}`);
+                            console.log(`stderr: ${stderr}`);
+                        }
+                    });
+                }
+            }
+
+
+            const ip = await publicIp.v4();
+            mailOptions.text = ``
+            for (let index = 0; index < to.length; index++) {
+                mailOptions.to = to[index];
+                const info = await mail.sendMail(mailOptions);
+                console.log('Email sent: ' + info.response);
+                enableSendEmailMinSpace = false;
+                setTimeout(() => {
+                    enableSendEmailMinSpace = true
+                }, 1000 * 60 * 60 * 24);
+                mailOptions.to = '';
+            }
+        }
+
+        if (availableMb > Number(MB_LIMIT)) {
+            enableSendEmailMinSpace = true;
         }
 
     } catch (err) {
