@@ -68,7 +68,7 @@ async function getFreeSpace(path, resize) {
         if (availableMb <= Number(MB_LIMIT) && resize) {
             const totalGb = Math.floor(Number(total * (9.537 * Math.pow(10, -10))));
             const amountToAdd = (process.env.AMOUNT_GB_ADD) ? process.env.AMOUNT_GB_ADD : 5;
-            const newSize = totalGb + amountToAdd;
+            const newSize = totalGb + Number(amountToAdd);
 
             if (process.env.VOLUME_ID) {
                 const respNewAmount = await axios.post(`https://api.digitalocean.com/v2/volumes/${process.env.VOLUME_ID}/actions`,
