@@ -103,18 +103,16 @@ async function getFreeSpace(path, resize) {
                                 console.log('Email sent: ' + info.response);
                                 mailOptions.to = '';
                             }
+
+                            if(availableMb > Number(MB_LIMIT) && !enableSendEmailMinSpace) {
+                                enableSendEmailMinSpace = true;
+                            }
                         }
                     });
                 }
             }
-
-
-
         }
 
-        if (availableMb > Number(MB_LIMIT)) {
-            enableSendEmailMinSpace = true;
-        }
 
     } catch (err) {
         console.error(err)
